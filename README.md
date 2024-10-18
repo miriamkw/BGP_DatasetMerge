@@ -15,9 +15,12 @@ pip install -r requirements.txt
 
 ## Process Data
 
-To do: describe how to run the data processing scripts, and which modifications to make.
+Create a folder named `unprocessed_data`, and place your acquired datasets in there. Open the file `process_data.py`,
+go to the bottom of the file, and comment out the lines for parsing datasets that you are not going to process.
 
-
-
+Then, run:
+```
+python process_data.py
+```
 
 

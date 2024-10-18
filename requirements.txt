@@ -2,4 +2,4 @@ pandas
 numpy
 matplotlib
 notebook
-
+git+https://github.com/miriamkw/GluPredKit.git@dataset_parsers#egg=glupredkit
