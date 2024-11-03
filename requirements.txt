@@ -1,5 +1,5 @@
 pandas
-numpy
+numpy==1.26.4
 matplotlib
 notebook
 git+https://github.com/miriamkw/GluPredKit.git@dataset_parsers#egg=glupredkit
