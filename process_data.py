@@ -32,7 +32,8 @@ def impute_datasets():
     source_folder = 'processed_data'
     for filename in os.listdir(source_folder):
         if 'imputed' and '.DS_Store' not in filename:
-            df = pd.read_csv(os.path.join(source_folder, filename), index_col='date', parse_dates=['date'])
+            df = pd.read_csv(os.path.join(source_folder, filename), index_col='date', parse_dates=['date'],
+                             low_memory=False)
             print(f"Processing {filename} with imputation...")
             all_processed_dfs = []  # List to store processed dataframes
 
@@ -105,7 +106,7 @@ def reorganize_results():
 
 
 def main():
-    setup_directories()
+    #setup_directories()
 
     # COMMENT OUT DATASET HERE IF YOU DON'T WANT TO PROCESS IT
     #parse_dataset("ohio_t1dm", UNPROCESSED_DATA_PATH)
