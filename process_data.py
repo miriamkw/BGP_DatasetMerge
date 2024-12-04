@@ -4,6 +4,8 @@ import subprocess
 import shutil
 import os
 import pandas as pd
+import numpy as np
+from smoother.smooth_SMBG_data import smooth_smbg_data
 
 UNPROCESSED_DATA_PATH = 'unprocessed_data'
 
@@ -26,6 +28,65 @@ def parse_dataset(parser, file_path, test_size='0.3'):
                             "--test-size", test_size])
 
 
+def impute_datasets():
+    source_folder = 'processed_data'
+    for filename in os.listdir(source_folder):
+        if 'imputed' and '.DS_Store' not in filename:
+            df = pd.read_csv(os.path.join(source_folder, filename), index_col='date', parse_dates=['date'])
+            print(f"Processing {filename} with imputation...")
+            all_processed_dfs = []  # List to store processed dataframes
+
+            for subject_id, subset_df in df.groupby('id'):  # Group by the 'id' column
+                forward_fill_cols = ['galvanic_skin_response', 'skin_temp', 'air_temp', 'heartrate']
+                for col in [col for col in forward_fill_cols if col in df.columns]:
+                    # First, set 0 to nan
+                    subset_df[col] = subset_df[col].replace(0, np.nan)
+                    # Then, forward fill with upper limit
+                    upper_limit = 12
+                    subset_df[col] = subset_df[col].fillna(method='ffill', limit=upper_limit)
+
+                fill_nan_with_zero_cols = ['carbs', 'bolus', 'basal', 'steps', 'acceleration']
+                for col in [col for col in fill_nan_with_zero_cols if col in subset_df.columns]:
+                    # First, set 0 to nan
+                    subset_df[col] = subset_df[col].replace(0, np.nan)
+                    # Replace NaN values with 0 if they were filled within the limit
+                    mask = subset_df[col].isna()  # Identify NaN values
+                    subset_df[col] = subset_df[col].fillna(0)
+                    # Retain NaN for stretches that exceed the limit
+                    upper_limit = 12*24
+                    subset_df[col] = subset_df[col].where(~mask | (mask & mask.shift(upper_limit, fill_value=False)), np.nan)
+
+                # Smoothen Cgm data
+                subset_df = smoothen_cgm_data(subset_df)
+                all_processed_dfs.append(subset_df)
+
+            df_processed = pd.concat(all_processed_dfs)
+            save_file_name = filename.split('.')[0] + '_imputed.' + filename.split('.')[1]
+            save_path = os.path.join(source_folder, save_file_name)
+            df_processed.to_csv(save_path)
+            print(f"Processed file saved as: {save_path}")
+
+
+def smoothen_cgm_data(df):
+    glucose_values = np.array(df['CGM'].values)
+    dates = np.array(df.index.values)
+    smoother_result = smooth_smbg_data(dates, glucose_values)
+
+    smoothed_df = pd.DataFrame({'y_smoothed': smoother_result['y_smoothed']}, index=smoother_result['t_i'])
+    df['CGM_smoothed'] = smoothed_df['y_smoothed'].reindex(df.index, method='nearest')
+
+    # Add nans to CGM smoothened if CGM is nan for more than two hours
+    df = df.copy()  # Explicitly create a new copy to avoid warnings
+    window_size = 24
+    rolling_nan_count = df['CGM'].isna().rolling(window=window_size, min_periods=1).sum()
+    full_nan_indices = rolling_nan_count[rolling_nan_count == window_size].index
+    for idx in full_nan_indices:
+        window_start = idx - pd.Timedelta(minutes=5 * (window_size - 1))
+        window_end = idx
+        df.loc[window_start:window_end, 'CGM_smoothed'] = np.nan
+    return df
+
+
 def reorganize_results():
     source_folder = os.path.join('data', 'raw')
     destination_folder = 'processed_data'
@@ -40,51 +101,22 @@ def reorganize_results():
 
     shutil.rmtree('data')
 
-    # Split files into a folder where each subject has its own file
-    for filename in os.listdir(destination_folder):
-        if ".csv" in filename:
-            #filename_without_end = filename.split(".")[0]
-            #new_folder_train = os.path.join(destination_folder, filename_without_end, 'train')
-            #new_folder_test = os.path.join(destination_folder, filename_without_end, 'test')
 
-            # Create a folder with the name of the file
-            #if not os.path.exists(new_folder_train):
-            #    os.makedirs(new_folder_train)
-            #    os.makedirs(new_folder_test)
-
-
-            # Open the df, split into each subject and train / test
-            #data_path = os.path.join(destination_folder, filename)
-            """
-            df = pd.read_csv(data_path, low_memory=False)
-            subject_ids = df['id'].unique()
-            for subject_id in subject_ids:
-                subset_df = df[df['id'] == subject_id]
-
-                train_df = subset_df[~subset_df['is_test']]
-                test_df = subset_df[subset_df['is_test']]
-
-                subject_data_train_path = os.path.join(new_folder_train, str(subject_id) + '.csv')
-                subject_data_test_path = os.path.join(new_folder_test, str(subject_id) + '.csv')
-
-                drop_cols = ['id', 'is_test']
-                train_df.drop(columns=drop_cols).to_csv(subject_data_train_path, index=False)
-                test_df.drop(columns=drop_cols).to_csv(subject_data_test_path, index=False)
-            """
-            # Delete original file
-            #os.remove(data_path)
 
 
 def main():
     setup_directories()
 
     # COMMENT OUT DATASET HERE IF YOU DON'T WANT TO PROCESS IT
-    parse_dataset("ohio_t1dm", UNPROCESSED_DATA_PATH)
+    #parse_dataset("ohio_t1dm", UNPROCESSED_DATA_PATH)
     #parse_dataset("tidepool_dataset", UNPROCESSED_DATA_PATH)
     #parse_dataset("t1dexi", UNPROCESSED_DATA_PATH)
     #parse_dataset("open_aps", os.path.join(UNPROCESSED_DATA_PATH, 'OpenAPS Data/'))
 
-    reorganize_results()
+    # TODO: Add derived features: ICE, IOB (but regenerate figures first! and send paper to supervisors!)
+
+    #reorganize_results()
+    impute_datasets()
 
 
 if __name__ == "__main__":

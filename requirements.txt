@@ -3,3 +3,5 @@ numpy==1.26.4
 matplotlib
 notebook
 git+https://github.com/miriamkw/GluPredKit.git@dataset_parsers#egg=glupredkit
+git+https://github.com/miriamkw/PyKalmanSmoothingGlucose.git@main#egg=kalman_smoothing_glucose
+
