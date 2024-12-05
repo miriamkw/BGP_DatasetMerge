@@ -31,35 +31,39 @@ def parse_dataset(parser, file_path, test_size='0.3'):
 def impute_datasets():
     source_folder = 'processed_data'
     for filename in os.listdir(source_folder):
-        if 'imputed' and '.DS_Store' not in filename:
+        # TODO: Remove some of them!
+        # TODO: also split into test / train!
+        if 'imputed' not in filename and '.DS_Store' not in filename and 'T1DEXI' not in filename and 'Ohio' not in filename:
             df = pd.read_csv(os.path.join(source_folder, filename), index_col='date', parse_dates=['date'],
                              low_memory=False)
             print(f"Processing {filename} with imputation...")
             all_processed_dfs = []  # List to store processed dataframes
 
             for subject_id, subset_df in df.groupby('id'):  # Group by the 'id' column
-                forward_fill_cols = ['galvanic_skin_response', 'skin_temp', 'air_temp', 'heartrate']
-                for col in [col for col in forward_fill_cols if col in df.columns]:
-                    # First, set 0 to nan
-                    subset_df[col] = subset_df[col].replace(0, np.nan)
-                    # Then, forward fill with upper limit
-                    upper_limit = 12
-                    subset_df[col] = subset_df[col].fillna(method='ffill', limit=upper_limit)
+                for is_test in [True, False]:
+                    subset_split_df = subset_df[subset_df['is_test'] == is_test]
+                    forward_fill_cols = ['galvanic_skin_response', 'skin_temp', 'air_temp', 'heartrate']
+                    for col in [col for col in forward_fill_cols if col in df.columns]:
+                        # First, set 0 to nan
+                        subset_split_df[col] = subset_split_df[col].replace(0, np.nan)
+                        # Then, forward fill with upper limit
+                        upper_limit = 12
+                        subset_split_df[col] = subset_split_df[col].fillna(method='ffill', limit=upper_limit)
 
-                fill_nan_with_zero_cols = ['carbs', 'bolus', 'basal', 'steps', 'acceleration']
-                for col in [col for col in fill_nan_with_zero_cols if col in subset_df.columns]:
-                    # First, set 0 to nan
-                    subset_df[col] = subset_df[col].replace(0, np.nan)
-                    # Replace NaN values with 0 if they were filled within the limit
-                    mask = subset_df[col].isna()  # Identify NaN values
-                    subset_df[col] = subset_df[col].fillna(0)
-                    # Retain NaN for stretches that exceed the limit
-                    upper_limit = 12*24
-                    subset_df[col] = subset_df[col].where(~mask | (mask & mask.shift(upper_limit, fill_value=False)), np.nan)
+                    fill_nan_with_zero_cols = ['carbs', 'bolus', 'basal', 'steps', 'acceleration']
+                    for col in [col for col in fill_nan_with_zero_cols if col in subset_split_df.columns]:
+                        # First, set 0 to nan
+                        subset_split_df[col] = subset_split_df[col].replace(0, np.nan)
+                        # Replace NaN values with 0 if they were filled within the limit
+                        mask = subset_split_df[col].isna()  # Identify NaN values
+                        subset_split_df[col] = subset_split_df[col].fillna(0)
+                        # Retain NaN for stretches that exceed the limit
+                        upper_limit = 12*24
+                        subset_split_df[col] = subset_split_df[col].where(~mask | (mask & mask.shift(upper_limit, fill_value=False)), np.nan)
 
-                # Smoothen Cgm data
-                subset_df = smoothen_cgm_data(subset_df)
-                all_processed_dfs.append(subset_df)
+                    # Smoothen Cgm data
+                    subset_split_df = smoothen_cgm_data(subset_split_df)
+                    all_processed_dfs.append(subset_split_df)
 
             df_processed = pd.concat(all_processed_dfs)
             save_file_name = filename.split('.')[0] + '_imputed.' + filename.split('.')[1]
@@ -74,6 +78,15 @@ def smoothen_cgm_data(df):
     smoother_result = smooth_smbg_data(dates, glucose_values)
 
     smoothed_df = pd.DataFrame({'y_smoothed': smoother_result['y_smoothed']}, index=smoother_result['t_i'])
+    # Convert smoothed_df index to match df's timezone
+    if df.index.tz is not None:  # df has a timezone
+        if smoothed_df.index.tz is None:  # smoothed_df is naive
+            smoothed_df.index = smoothed_df.index.tz_localize(df.index.tz)  # Localize to df's timezone
+        else:  # smoothed_df already has a timezone
+            smoothed_df.index = smoothed_df.index.tz_convert(df.index.tz)  # Convert to the same timezone as df
+    else:  # df.index is naive (no timezone)
+        smoothed_df.index = smoothed_df.index.tz_localize(None)  # Make smoothed_df naive
+
     df['CGM_smoothed'] = smoothed_df['y_smoothed'].reindex(df.index, method='nearest')
 
     # Add nans to CGM smoothened if CGM is nan for more than two hours
@@ -106,7 +119,7 @@ def reorganize_results():
 
 
 def main():
-    #setup_directories()
+    setup_directories()
 
     # COMMENT OUT DATASET HERE IF YOU DON'T WANT TO PROCESS IT
     #parse_dataset("ohio_t1dm", UNPROCESSED_DATA_PATH)
@@ -116,7 +129,7 @@ def main():
 
     # TODO: Add derived features: ICE, IOB (but regenerate figures first! and send paper to supervisors!)
 
-    #reorganize_results()
+    reorganize_results()
     impute_datasets()
 
 

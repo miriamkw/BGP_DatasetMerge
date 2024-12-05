@@ -167,4 +167,4 @@ venv3.9/*
 data/*
 processed_data/*
 unprocessed_data/*
-
+data_diagnostics/*

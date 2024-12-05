@@ -24,3 +24,11 @@ python process_data.py
 ```
 
 
+## To be done...
+- Add a user data file, with information about each subjects insulin type
+- Add derived feature of ICE and IOB given the insulin type
+
+
+
+
+
