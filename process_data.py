@@ -31,9 +31,7 @@ def parse_dataset(parser, file_path, test_size='0.3'):
 def impute_datasets():
     source_folder = 'processed_data'
     for filename in os.listdir(source_folder):
-        # TODO: Remove some of them!
-        # TODO: also split into test / train!
-        if 'imputed' not in filename and '.DS_Store' not in filename and 'T1DEXI' not in filename and 'Ohio' not in filename:
+        if 'imputed' not in filename and '.DS_Store' not in filename:
             df = pd.read_csv(os.path.join(source_folder, filename), index_col='date', parse_dates=['date'],
                              low_memory=False)
             print(f"Processing {filename} with imputation...")
@@ -41,25 +39,31 @@ def impute_datasets():
 
             for subject_id, subset_df in df.groupby('id'):  # Group by the 'id' column
                 for is_test in [True, False]:
-                    subset_split_df = subset_df[subset_df['is_test'] == is_test]
+                    subset_split_df = subset_df[subset_df['is_test'] == is_test].copy()
                     forward_fill_cols = ['galvanic_skin_response', 'skin_temp', 'air_temp', 'heartrate']
                     for col in [col for col in forward_fill_cols if col in df.columns]:
                         # First, set 0 to nan
-                        subset_split_df[col] = subset_split_df[col].replace(0, np.nan)
+                        subset_split_df.loc[:, col] = subset_split_df[col].replace(0, np.nan)
                         # Then, forward fill with upper limit
                         upper_limit = 12
-                        subset_split_df[col] = subset_split_df[col].fillna(method='ffill', limit=upper_limit)
+                        # subset_split_df[col] = subset_split_df[col].fillna(method='ffill', limit=upper_limit)
+                        subset_split_df.loc[:, col] = subset_split_df[col].fillna(method='ffill', limit=upper_limit)
 
                     fill_nan_with_zero_cols = ['carbs', 'bolus', 'basal', 'steps', 'acceleration']
                     for col in [col for col in fill_nan_with_zero_cols if col in subset_split_df.columns]:
                         # First, set 0 to nan
-                        subset_split_df[col] = subset_split_df[col].replace(0, np.nan)
+                        subset_split_df.loc[:, col] = subset_split_df[col].replace(0, np.nan)
+
                         # Replace NaN values with 0 if they were filled within the limit
                         mask = subset_split_df[col].isna()  # Identify NaN values
-                        subset_split_df[col] = subset_split_df[col].fillna(0)
+                        # subset_split_df[col] = subset_split_df[col].fillna(0)
+                        subset_split_df.loc[:, col] = subset_split_df[col].fillna(0)
                         # Retain NaN for stretches that exceed the limit
                         upper_limit = 12*24
-                        subset_split_df[col] = subset_split_df[col].where(~mask | (mask & mask.shift(upper_limit, fill_value=False)), np.nan)
+                        subset_split_df.loc[:, col] = subset_split_df[col].where(
+                            ~mask | (mask & mask.shift(upper_limit, fill_value=False)),
+                            np.nan
+                        )
 
                     # Smoothen Cgm data
                     subset_split_df = smoothen_cgm_data(subset_split_df)
@@ -73,6 +77,11 @@ def impute_datasets():
 
 
 def smoothen_cgm_data(df):
+
+    if df['CGM'].isna().all():
+        df.loc[:, 'CGM_smoothed'] = df['CGM']
+        return df
+
     glucose_values = np.array(df['CGM'].values)
     dates = np.array(df.index.values)
     smoother_result = smooth_smbg_data(dates, glucose_values)
@@ -87,7 +96,7 @@ def smoothen_cgm_data(df):
     else:  # df.index is naive (no timezone)
         smoothed_df.index = smoothed_df.index.tz_localize(None)  # Make smoothed_df naive
 
-    df['CGM_smoothed'] = smoothed_df['y_smoothed'].reindex(df.index, method='nearest')
+    df.loc[:, 'CGM_smoothed'] = smoothed_df['y_smoothed'].reindex(df.index, method='nearest')
 
     # Add nans to CGM smoothened if CGM is nan for more than two hours
     df = df.copy()  # Explicitly create a new copy to avoid warnings
@@ -122,10 +131,10 @@ def main():
     setup_directories()
 
     # COMMENT OUT DATASET HERE IF YOU DON'T WANT TO PROCESS IT
-    #parse_dataset("ohio_t1dm", UNPROCESSED_DATA_PATH)
-    #parse_dataset("tidepool_dataset", UNPROCESSED_DATA_PATH)
-    #parse_dataset("t1dexi", UNPROCESSED_DATA_PATH)
-    #parse_dataset("open_aps", os.path.join(UNPROCESSED_DATA_PATH, 'OpenAPS Data/'))
+    parse_dataset("ohio_t1dm", UNPROCESSED_DATA_PATH)
+    parse_dataset("tidepool_dataset", UNPROCESSED_DATA_PATH)
+    parse_dataset("t1dexi", UNPROCESSED_DATA_PATH)
+    parse_dataset("open_aps", os.path.join(UNPROCESSED_DATA_PATH, 'OpenAPS Data/'))
 
     # TODO: Add derived features: ICE, IOB (but regenerate figures first! and send paper to supervisors!)
 
