@@ -4,4 +4,5 @@ matplotlib
 notebook
 git+https://github.com/miriamkw/GluPredKit.git@dataset_parsers#egg=glupredkit
 git+https://github.com/miriamkw/PyKalmanSmoothingGlucose.git@main#egg=kalman_smoothing_glucose
+git+https://github.com/miriamkw/LoopAlgorithmToPython.git
 
