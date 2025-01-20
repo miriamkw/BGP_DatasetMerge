@@ -23,10 +23,12 @@ Then, run:
 python process_data.py
 ```
 
+Add derived features like insulin on board or insulin counteraction effects using the CLI commands in `add_derived_features.py` (temporarily only available on Mac).
 
-## To be done...
+
+## To do
 - Add a user data file, with information about each subjects insulin type
-- Add derived feature of ICE and IOB given the insulin type
+- Use the specific insulin type in computing derived features like ICE and IOB
 
 
 
